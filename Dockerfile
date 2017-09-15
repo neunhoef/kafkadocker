@@ -1,5 +1,5 @@
 FROM ubuntu:17.04
-MAINTAINER Max Neunhoeffer <max@arangodb.com>
+MAINTAINER Ewout Prangsma
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
