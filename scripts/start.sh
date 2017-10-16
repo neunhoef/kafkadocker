@@ -1,11 +1,55 @@
 #!/bin/bash
 
-export KAFKA_PORT=${KAFKA_PORT:-9092}
-export KAFKA_ADVERTISED_LISTENERS="PLAINTEXT://${KAFKA_ADVERTISED_HOST_NAME-}:${KAFKA_ADVERTISED_PORT-$KAFKA_PORT}"
-export KAFKA_LISTENERS="PLAINTEXT://${KAFKA_HOST_NAME-}:${KAFKA_PORT-9092}"
+KAFKA_PORT=${KAFKA_PORT:-9092}
+KAFKA_SSL_PORT=${KAFKA_SSL_PORT:-9093}
+KAFKA_SECURITY=${KAFKA_SECURITY:=-none}
+KAFKA_TRUSTSTORE=${KAFKA_TRUSTSTORE:-${KAFKA_KEYSTORE}}
+KAFKA_TRUSTSTORE_PASSWORD=${KAFKA_TRUSTSTORE_PASSWORD:-${KAFKA_KEYSTORE_PASSWORD}}
 
-sed -i -e "s|_KAFKA_LISTENERS_|${KAFKA_LISTENERS}|g" /config/server.properties 
-sed -i -e "s|_KAFKA_ADVERTISED_LISTENERS_|${KAFKA_ADVERTISED_LISTENERS}|g" /config/server.properties 
+KAFKA_PLAIN_ADVERTISED_LISTENERS="PLAINTEXT://${KAFKA_ADVERTISED_HOST_NAME-}:${KAFKA_ADVERTISED_PORT-$KAFKA_PORT}"
+KAFKA_PLAIN_LISTENERS="PLAINTEXT://${KAFKA_HOST_NAME-}:${KAFKA_PORT}"
+KAFKA_SSL_ADVERTISED_LISTENERS="SSL://${KAFKA_ADVERTISED_HOST_NAME-}:${KAFKA_ADVERTISED_SSL_PORT-$KAFKA_SSL_PORT}"
+KAFKA_SSL_LISTENERS="SSL://${KAFKA_HOST_NAME-}:${KAFKA_SSL_PORT}"
+
+case ${KAFKA_SECURITY} in
+none|plain)
+    KAFKA_ADVERTISED_LISTENERS="${KAFKA_PLAIN_ADVERTISED_LISTENERS}"
+    KAFKA_LISTENERS="${KAFKA_PLAIN_LISTENERS}"
+    KAFKA_PORTS="${KAFKA_PORT}"
+    KAFKA_INTER_BROKER_PROTOCOL=PLAINTEXT
+    ;;
+ssl)
+    KAFKA_ADVERTISED_LISTENERS="${KAFKA_SSL_ADVERTISED_LISTENERS}"
+    KAFKA_LISTENERS="${KAFKA_SSL_LISTENERS}"
+    KAFKA_PORTS="${KAFKA_SSL_PORT}"
+    KAFKA_INTER_BROKER_PROTOCOL=SSL
+    ;;
+both)
+    KAFKA_ADVERTISED_LISTENERS="${KAFKA_PLAIN_ADVERTISED_LISTENERS},${KAFKA_SSL_ADVERTISED_LISTENERS}"
+    KAFKA_LISTENERS="${KAFKA_PLAIN_LISTENERS},${KAFKA_SSL_LISTENERS}"
+    KAFKA_PORTS="${KAFKA_PORT},${KAFKA_SSL_PORT}"
+    KAFKA_INTER_BROKER_PROTOCOL=SSL
+    ;;
+*)
+    echo "ERROR: unknown KAFKA_SECURITY \"$KAFKA_SECURITY\""
+    exit 1
+    ;;
+esac
+
+CFGFILE=/config/server.properties 
+sed -i -e "s|_KAFKA_LISTENERS_|${KAFKA_LISTENERS}|g" $CFGFILE
+sed -i -e "s|_KAFKA_ADVERTISED_LISTENERS_|${KAFKA_ADVERTISED_LISTENERS}|g" $CFGFILE
+
+if [ ! -z "${KAFKA_KEYSTORE}" ]; then 
+    echo "ssl.keystore.location=${KAFKA_KEYSTORE}" >> $CFGFILE
+    echo "ssl.keystore.password=${KAFKA_KEYSTORE_PASSWORD}" >> $CFGFILE
+    #ssl.key.password=test1234 ??
+fi
+if [ ! -z "${KAFKA_TRUSTSTORE}" ]; then 
+    echo "ssl.truststore.location=${KAFKA_TRUSTSTORE}" >> $CFGFILE
+    echo "ssl.truststore.password=${KAFKA_TRUSTSTORE_PASSWORD}" >> $CFGFILE
+fi
+echo "security.inter.broker.protocol=${KAFKA_INTER_BROKER_PROTOCOL}" >> $CFGFILE
 
 if [ "$1" == "serve" ] ; then
     cd /kafka_2.11-0.11.0.0
@@ -19,8 +63,8 @@ if [ "$1" == "serve" ] ; then
     bin/zookeeper-server-start.sh /config/zookeeper.properties > /tmp/zookeeper.log &
     sleep 5
 
-    echo Starting kafka on port 9092...
-    bin/kafka-server-start.sh /config/server.properties > /tmp/kafka.log
+    echo Starting kafka on port ${KAFKA_PORTS}...
+    bin/kafka-server-start.sh $CFGFILE > /tmp/kafka.log
 else
     export PATH=/kafka_2.11-0.11.0.0/bin:$PATH
     exec "$@"
