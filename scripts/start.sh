@@ -50,6 +50,9 @@ if [ ! -z "${KAFKA_TRUSTSTORE}" ]; then
     echo "ssl.truststore.password=${KAFKA_TRUSTSTORE_PASSWORD}" >> $CFGFILE
 fi
 echo "security.inter.broker.protocol=${KAFKA_INTER_BROKER_PROTOCOL}" >> $CFGFILE
+if [ ! -z "${KAFKA_SSL_CLIENT_AUTH}" ]; then 
+    echo "ssl.client.auth=${KAFKA_SSL_CLIENT_AUTH}" >> $CFGFILE
+fi
 
 if [ "$1" == "serve" ] ; then
     cd /kafka_2.11-0.11.0.0
